@@ -1,6 +1,6 @@
 id=memory_writeback
 name=ZRAM Smart Writeback
-version=v1.2
-versionCode=3
+version=v1.5
+versionCode=5
 author=Allenwdk, QWEN
 description=自动在应用切换、锁屏或内存过高时触发zram回写。
