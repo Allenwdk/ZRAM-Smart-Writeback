@@ -320,6 +320,9 @@ cancel_delayed_writeback() {
 # === 应用切换检测（使用 dumpsys window）===
 monitor_app_switch() {
   local last_pkg=""
+  local app_switch_time=0
+  local stage_1_done="false"   # 30秒标记
+  local stage_2_done="false"   # 45秒标记
   
   log "🔍 开始应用切换监控 (dumpsys window)"
   
@@ -367,10 +370,38 @@ monitor_app_switch() {
         # 检测到应用切换
         if [ "$pkg_name" != "$last_pkg" ] && [ -n "$last_pkg" ]; then
           log "📱 应用切换: $last_pkg → $pkg_name"
-          perform_writeback
-          LAST_APP_SWITCH=$(date +%s)
+          # 重置延时处理状态和时间
+          app_switch_time=$(date +%s)
+          stage_1_done="false"
+          stage_2_done="false"
         fi
         last_pkg="$pkg_name"  # 仅在有效应用切换时更新
+        
+        # 如果已经发生应用切换，检查延时处理
+        if [ $app_switch_time -gt 0 ]; then
+          current_time=$(date +%s)
+          elapsed_time=$((current_time - app_switch_time))
+          
+          # 30秒后执行 idle all
+          if [ "$stage_1_done" = "false" ] && [ $elapsed_time -ge 30 ]; then
+            if echo all > "$ZRAM_DEV/idle" 2>/dev/null; then
+              log "💤 应用停留30秒，标记所有 zram 内存页为 idle"
+              stage_1_done="true"
+            else
+              log "❌ idle all 操作失败"
+            fi
+          fi
+          
+          # 45秒后执行回写 (30+15)
+          if [ "$stage_1_done" = "true" ] && [ "$stage_2_done" = "false" ] && [ $elapsed_time -ge 45 ]; then
+            if echo idle > "$ZRAM_DEV/writeback" 2>/dev/null; then
+              log "💡 应用停留45秒，触发 zram 回写操作"
+              stage_2_done="true"
+            else
+              log "❌ zram 回写失败! 请检查权限"
+            fi
+          fi
+        fi
       fi
     fi
     
